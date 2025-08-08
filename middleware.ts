@@ -24,7 +24,10 @@ export async function middleware(request: NextRequest) {
     secureCookie: !isDevelopmentEnvironment,
   });
 
-  if (!token) {
+  // Check for guest session cookie as fallback
+  const guestSession = request.cookies.get('guest-session');
+
+  if (!token && !guestSession) {
     const redirectUrl = encodeURIComponent(request.url);
 
     return NextResponse.redirect(

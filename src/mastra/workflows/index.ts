@@ -1,6 +1,6 @@
 import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
-import { Step, Workflow } from '@mastra/core/workflows';
+import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { z } from 'zod';
 
 const llm = openai('gpt-4o');
@@ -64,15 +64,15 @@ const forecastSchema = z.array(
   }),
 );
 
-const fetchWeather = new Step({
+const fetchWeather = createStep({
   id: 'fetch-weather',
   description: 'Fetches weather forecast for a given city',
   inputSchema: z.object({
     city: z.string().describe('The city to get the weather for'),
   }),
   outputSchema: forecastSchema,
-  execute: async ({ context }) => {
-    const triggerData = context?.getStepResult<{ city: string }>('trigger');
+  execute: async ({ inputData }) => {
+    const triggerData = inputData;
 
     if (!triggerData) {
       throw new Error('Trigger data not found');
@@ -107,7 +107,7 @@ const fetchWeather = new Step({
       maxTemp: data.daily.temperature_2m_max[index],
       minTemp: data.daily.temperature_2m_min[index],
       precipitationChance: data.daily.precipitation_probability_mean[index],
-      condition: getWeatherCondition(data.daily.weathercode[index]!),
+      condition: getWeatherCondition(data.daily.weathercode[index] ?? 0),
       location: name,
     }));
 
@@ -115,11 +115,15 @@ const fetchWeather = new Step({
   },
 });
 
-const planActivities = new Step({
+const planActivities = createStep({
   id: 'plan-activities',
   description: 'Suggests activities based on weather conditions',
-  execute: async ({ context, mastra }) => {
-    const forecast = context?.getStepResult(fetchWeather);
+  inputSchema: z.object({}),
+  outputSchema: z.object({
+    activities: z.string(),
+  }),
+  execute: async ({ getStepResult, mastra }) => {
+    const forecast = getStepResult(fetchWeather);
 
     if (!forecast || forecast.length === 0) {
       throw new Error('Forecast data not found');
@@ -171,15 +175,16 @@ function getWeatherCondition(code: number): string {
   return conditions[code] || 'Unknown';
 }
 
-const weatherWorkflow = new Workflow({
-  name: 'weather-workflow',
-  triggerSchema: z.object({
+const weatherWorkflow = createWorkflow({
+  id: 'weather-workflow',
+  description: 'Weather-based activity planning workflow',
+  inputSchema: z.object({
     city: z.string().describe('The city to get the weather for'),
   }),
-})
-  .step(fetchWeather)
-  .then(planActivities);
-
-weatherWorkflow.commit();
+  outputSchema: z.object({
+    activities: z.string(),
+  }),
+  steps: [fetchWeather, planActivities],
+});
 
 export { weatherWorkflow };

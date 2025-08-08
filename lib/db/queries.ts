@@ -30,6 +30,8 @@ import {
   managedFile,
   type DBManagedFileType,
   tag,
+  chatFile,
+  type ChatFile,
 } from './schema';
 import type { ArtifactKind } from '@/components/artifact/artifact';
 import { generateUUID } from '../utils';
@@ -98,15 +100,35 @@ export async function saveChat({
   visibility: VisibilityType;
 }) {
   try {
-    return await db.insert(chat).values({
+    console.log('=== SAVING CHAT TO DATABASE ===');
+    console.log('Chat ID:', id);
+    console.log('User ID:', userId);
+    console.log('Title:', title);
+    console.log('Visibility:', visibility);
+
+    const result = await db
+      .insert(chat)
+      .values({
+        id,
+        userId,
+        title,
+        visibility,
+        createdAt: new Date(),
+      })
+      .returning();
+
+    console.log('✅ Chat saved successfully:', result);
+    return result[0];
+  } catch (error) {
+    console.error('❌ Failed to save chat:', error);
+    console.error('Error details:', {
       id,
-      createdAt: new Date(),
       userId,
       title,
       visibility,
+      errorMessage: error instanceof Error ? error.message : 'Unknown error',
+      errorStack: error instanceof Error ? error.stack : undefined,
     });
-  } catch (error) {
-    console.error('Failed to save chat in database');
     throw error;
   }
 }
@@ -617,9 +639,9 @@ export async function deleteManagedFile(
           },
         });
 
-        // Wtf is mastra naming this?
+        // Delete vectors from the index
         for (const vector of vectors) {
-          await vectorStore.deleteIndexById(indexName, vector.id);
+          await vectorStore.deleteIndex({ indexName });
         }
       } catch (vectorStoreError) {
         console.error('Error deleting from vector store', vectorStoreError);
@@ -672,10 +694,213 @@ export async function createTagIfNotExists(
 
 export async function deleteTag(id: string): Promise<boolean> {
   try {
-    await db.delete(tag).where(eq(tag.id, id));
-    return true;
+    const result = await db.delete(tag).where(eq(tag.id, id)).returning();
+    return result.length > 0;
   } catch (error) {
-    console.error('Failed to delete tag', error);
+    console.error('Failed to delete tag from database');
     return false;
+  }
+}
+
+// Chat-File relationship functions
+export async function addFileToChat({
+  chatId,
+  fileId,
+}: {
+  chatId: string;
+  fileId: string;
+}): Promise<ChatFile | null> {
+  try {
+    console.log('=== ADDING FILE TO CHAT IN DATABASE ===');
+    console.log('Chat ID:', chatId);
+    console.log('File ID:', fileId);
+
+    // First, check if the file already has an originalChatId set
+    const existingFile = await db
+      .select({ originalChatId: managedFile.originalChatId })
+      .from(managedFile)
+      .where(eq(managedFile.id, fileId))
+      .limit(1);
+
+    // If the file doesn't have an originalChatId set, update it with the current chatId
+    if (existingFile.length > 0 && !existingFile[0].originalChatId) {
+      console.log('Updating originalChatId for file:', fileId);
+      await db
+        .update(managedFile)
+        .set({ originalChatId: chatId })
+        .where(eq(managedFile.id, fileId));
+    }
+
+    const result = await db
+      .insert(chatFile)
+      .values({ chatId, fileId })
+      .returning();
+
+    console.log('Database insert result:', result);
+    return result[0] || null;
+  } catch (error) {
+    console.error('Failed to add file to chat:', error);
+    console.error('Error details:', {
+      chatId,
+      fileId,
+      errorMessage: error instanceof Error ? error.message : 'Unknown error',
+      errorStack: error instanceof Error ? error.stack : undefined,
+    });
+    return null;
+  }
+}
+
+export async function removeFileFromChat({
+  chatId,
+  fileId,
+}: {
+  chatId: string;
+  fileId: string;
+}): Promise<boolean> {
+  try {
+    const result = await db
+      .delete(chatFile)
+      .where(and(eq(chatFile.chatId, chatId), eq(chatFile.fileId, fileId)))
+      .returning();
+    return result.length > 0;
+  } catch (error) {
+    console.error('Failed to remove file from chat');
+    return false;
+  }
+}
+
+export async function getFilesByChatId(
+  chatId: string,
+): Promise<DBManagedFileType[]> {
+  try {
+    console.log('=== GETTING FILES BY CHAT ID ===');
+    console.log('Chat ID:', chatId);
+
+    // First get the file IDs for this chat
+    const chatFileIds = await db
+      .select({ fileId: chatFile.fileId })
+      .from(chatFile)
+      .where(eq(chatFile.chatId, chatId));
+
+    if (chatFileIds.length === 0) {
+      console.log('No files found for chat');
+      return [];
+    }
+
+    // Then get the actual file data for these IDs
+    const result = await db
+      .select({
+        id: managedFile.id,
+        name: managedFile.name,
+        blobUrl: managedFile.blobUrl,
+        blobDownloadUrl: managedFile.blobDownloadUrl,
+        mimeType: managedFile.mimeType,
+        size: managedFile.size,
+        aiSummary: managedFile.aiSummary,
+        tags: managedFile.tags,
+        uploadedAt: managedFile.uploadedAt,
+        userId: managedFile.userId,
+        isEmbedded: managedFile.isEmbedded,
+        originalChatId: managedFile.originalChatId,
+      })
+      .from(managedFile)
+      .where(
+        inArray(
+          managedFile.id,
+          chatFileIds.map((cf) => cf.fileId),
+        ),
+      );
+
+    console.log('Database query result:', result);
+    console.log('Files found for chat:', result.length);
+    console.log(
+      'File names found:',
+      result.map((f) => f.name),
+    );
+
+    return result;
+  } catch (error) {
+    console.error('Failed to get files by chat ID:', error);
+    return [];
+  }
+}
+
+export async function getChatsByFileId(fileId: string): Promise<Chat[]> {
+  try {
+    const result = await db
+      .select({
+        id: chat.id,
+        createdAt: chat.createdAt,
+        title: chat.title,
+        userId: chat.userId,
+        visibility: chat.visibility,
+      })
+      .from(chat)
+      .innerJoin(chatFile, eq(chat.id, chatFile.chatId))
+      .where(eq(chatFile.fileId, fileId));
+
+    return result;
+  } catch (error) {
+    console.error('Failed to get chats by file ID');
+    return [];
+  }
+}
+
+export async function isFileInChat({
+  chatId,
+  fileId,
+}: {
+  chatId: string;
+  fileId: string;
+}): Promise<boolean> {
+  try {
+    const result = await db
+      .select()
+      .from(chatFile)
+      .where(and(eq(chatFile.chatId, chatId), eq(chatFile.fileId, fileId)));
+
+    return result.length > 0;
+  } catch (error) {
+    console.error('Failed to check if file is in chat');
+    return false;
+  }
+}
+
+export async function getFilesByOriginalChatId(
+  originalChatId: string,
+): Promise<DBManagedFileType[]> {
+  try {
+    console.log('=== GETTING FILES BY ORIGINAL CHAT ID ===');
+    console.log('Original Chat ID:', originalChatId);
+
+    const result = await db
+      .select({
+        id: managedFile.id,
+        name: managedFile.name,
+        blobUrl: managedFile.blobUrl,
+        blobDownloadUrl: managedFile.blobDownloadUrl,
+        mimeType: managedFile.mimeType,
+        size: managedFile.size,
+        aiSummary: managedFile.aiSummary,
+        tags: managedFile.tags,
+        uploadedAt: managedFile.uploadedAt,
+        userId: managedFile.userId,
+        isEmbedded: managedFile.isEmbedded,
+        originalChatId: managedFile.originalChatId,
+      })
+      .from(managedFile)
+      .where(eq(managedFile.originalChatId, originalChatId));
+
+    console.log('Database query result:', result);
+    console.log('Files originally uploaded to chat:', result.length);
+    console.log(
+      'File names originally uploaded to chat:',
+      result.map((f) => f.name),
+    );
+
+    return result;
+  } catch (error) {
+    console.error('Failed to get files by original chat ID:', error);
+    return [];
   }
 }

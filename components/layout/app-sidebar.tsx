@@ -21,7 +21,6 @@ import {
   SidebarMenu,
   useSidebar,
 } from '@/components/ui/sidebar';
-import Link from 'next/link';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 
 export function AppSidebar({ user }: { user: User | undefined }) {

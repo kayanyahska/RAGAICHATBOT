@@ -41,7 +41,7 @@ const THEME_COLOR_SCRIPT = `\
   }
   function updateThemeColor() {
     var isDark = html.classList.contains('dark');
-    meta.setAttribute('content', isDark ? '${DARK_THEME_COLOR}' : '${LIGHT_THEME_COLOR}');
+    meta.setAttribute('content', isDark ? 'hsl(240deg 10% 3.92%)' : 'hsl(0 0% 100%)');
   }
   var observer = new MutationObserver(updateThemeColor);
   observer.observe(html, { attributes: true, attributeFilter: ['class'] });

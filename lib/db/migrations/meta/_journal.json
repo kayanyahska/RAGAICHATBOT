@@ -71,6 +71,20 @@
       "when": 1747267619569,
       "tag": "0009_lonely_lester",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1754617739817,
+      "tag": "0010_vengeful_lila_cheney",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1754675960030,
+      "tag": "0011_clammy_talkback",
+      "breakpoints": true
     }
   ]
 }

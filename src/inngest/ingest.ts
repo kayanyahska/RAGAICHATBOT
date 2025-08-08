@@ -1,14 +1,14 @@
-import {
-  updateManagedFile,
-  getAllTags,
-} from '@/lib/db/queries';
+import { updateManagedFile, getAllTags } from '@/lib/db/queries';
 import { inngest } from './client';
 import { MDocument } from '@mastra/rag';
 import { openai } from '@ai-sdk/openai';
+import { xai } from '@ai-sdk/xai';
+import { ollama } from 'ollama-ai-provider';
 import { embedMany, generateObject } from 'ai';
 import { store as vectorStore } from '@/lib/db/vector-store'; // Use your configured store
 import { z } from 'zod';
 import { extractText, getDocumentProxy } from 'unpdf';
+import { getVectorDimensions } from '@/lib/ai/utils';
 
 // Define the event payload type for clarity
 interface FileEmbedRequestedEvent {
@@ -24,6 +24,42 @@ interface FileEmbedRequestedEvent {
     id: string;
   };
 }
+
+// Helper function to get the best available embedding model with fallback
+const getBestEmbeddingModel = () => {
+  // Prioritize Ollama embeddings - no rate limits!
+  if (process.env.OLLAMA_BASE_URL || process.env.OLLAMA_HOST) {
+    return ollama.embedding('nomic-embed-text');
+  }
+
+  if (process.env.OPENAI_API_KEY) {
+    return openai.embedding('text-embedding-3-small');
+  }
+
+  throw new Error(
+    'No embedding model available. Please set OLLAMA_BASE_URL or OPENAI_API_KEY',
+  );
+};
+
+// Helper function to get the best available model for generation
+const getBestGenerationModel = () => {
+  // Prioritize Ollama Mistral - no rate limits!
+  if (process.env.OLLAMA_BASE_URL || process.env.OLLAMA_HOST) {
+    return ollama('mistral');
+  }
+
+  if (process.env.OPENAI_API_KEY) {
+    return openai('gpt-4o-mini');
+  }
+
+  if (process.env.XAI_API_KEY) {
+    return xai('grok-2-vision-1212');
+  }
+
+  throw new Error(
+    'No AI provider configured. Please set OLLAMA_BASE_URL, OPENAI_API_KEY, or XAI_API_KEY',
+  );
+};
 
 export const embedFileOnUpload = inngest.createFunction(
   { id: 'embed-file-on-upload', name: 'Embed File on Upload' },
@@ -185,7 +221,7 @@ export const embedFileOnUpload = inngest.createFunction(
       'generate-summary-and-tags',
       async () => {
         const { object } = await generateObject({
-          model: openai('gpt-4o-mini'),
+          model: getBestGenerationModel(),
           schema: z.object({
             summary: z.string(),
             tags: z.array(z.string()).max(5),
@@ -252,13 +288,19 @@ export const embedFileOnUpload = inngest.createFunction(
     });
 
     const { embeddings } = await step.run('generate-embeddings', async () => {
+      const embeddingModel = getBestEmbeddingModel();
+      const modelName = embeddingModel.modelId || 'nomic-embed-text';
+      const dimensions = getVectorDimensions(modelName);
+
+      console.log(
+        `🔍 Generating embeddings with ${modelName} (${dimensions} dimensions)`,
+      );
+
       return embedMany({
         values: chunks.map(
           (chunk) => `${JSON.stringify(chunk.metadata)}\n\n${chunk.text}`,
         ), // Use your own metadata template here
-        model: openai.embedding('text-embedding-3-small', {
-          dimensions: 1536,
-        }), // Ensure dimensions match pgVector setup
+        model: embeddingModel,
       });
     });
     console.log('Successfully generated embeddings', embeddings.length);

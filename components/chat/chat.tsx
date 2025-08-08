@@ -21,6 +21,7 @@ import { useChatVisibility } from '@/hooks/use-chat-visibility';
 import { useAutoResume } from '@/hooks/use-auto-resume';
 import { FileViewerPane } from './file-viewer-pane';
 import { useSidebar } from '../ui/sidebar';
+import { ChatFileManager } from './chat-file-manager';
 
 export function Chat({
   id,
@@ -143,6 +144,11 @@ export function Chat({
         session={session}
       />
       <div className={cn('w-full flex flex-row flex-grow overflow-hidden')}>
+        {/* Chat File Manager Sidebar */}
+        <div className="w-80 border-r bg-muted/30 overflow-y-auto">
+          <ChatFileManager chatId={id} userId={session.user.id} />
+        </div>
+
         <div
           className={cn(
             'h-full overflow-y-auto transition-all duration-300 ease-in-out overflow-x-hidden',

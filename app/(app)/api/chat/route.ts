@@ -28,37 +28,36 @@ import { myProvider } from '@/lib/ai/providers';
 import { entitlementsByUserType } from '@/lib/ai/entitlements';
 import { postRequestBodySchema, type PostRequestBody } from './schema';
 import { geolocation } from '@vercel/functions';
-import {
-  createResumableStreamContext,
-  type ResumableStreamContext,
-} from 'resumable-stream';
-import { after } from 'next/server';
+import type { ResumableStreamContext } from 'resumable-stream';
 import type { Chat } from '@/lib/db/schema';
 import { differenceInSeconds } from 'date-fns';
 import { searchKnowledgeBase } from '@/lib/ai/tools/search-knowledge-base';
 
 export const maxDuration = 60;
 
-let globalStreamContext: ResumableStreamContext | null = null;
+const globalStreamContext: ResumableStreamContext | null = null;
 
-function getStreamContext() {
-  if (!globalStreamContext) {
-    try {
-      globalStreamContext = createResumableStreamContext({
-        waitUntil: after,
-      });
-    } catch (error: any) {
-      if (error.message.includes('REDIS_URL')) {
-        console.log(
-          ' > Resumable streams are disabled due to missing REDIS_URL',
-        );
-      } else {
-        console.error(error);
-      }
-    }
-  }
+function getStreamContext(): ResumableStreamContext | null {
+  // Temporarily disable Redis functionality
+  return null;
 
-  return globalStreamContext;
+  // if (!globalStreamContext) {
+  //   try {
+  //     globalStreamContext = createResumableStreamContext({
+  //       waitUntil: after,
+  //     });
+  //   } catch (error: any) {
+  //     if (error.message.includes('REDIS_URL')) {
+  //       console.log(
+  //         ' > Resumable streams are disabled due to missing REDIS_URL',
+  //       );
+  //     } else {
+  //       console.error(error);
+  //     }
+  //   }
+  // }
+
+  // return globalStreamContext;
 }
 
 export async function POST(request: Request) {
@@ -83,17 +82,27 @@ export async function POST(request: Request) {
 
     const userType: UserType = session.user.type;
 
-    const messageCount = await getMessageCountByUserId({
-      id: session.user.id,
-      differenceInHours: 24,
-    });
+    // Skip rate limiting if using Ollama (local model with no API limits)
+    const isUsingOllama =
+      process.env.OLLAMA_BASE_URL || process.env.OLLAMA_HOST;
 
-    if (messageCount > entitlementsByUserType[userType].maxMessagesPerDay) {
-      return new Response(
-        'You have exceeded your maximum number of messages for the day! Please try again later.',
-        {
-          status: 429,
-        },
+    if (!isUsingOllama) {
+      const messageCount = await getMessageCountByUserId({
+        id: session.user.id,
+        differenceInHours: 24,
+      });
+
+      if (messageCount > entitlementsByUserType[userType].maxMessagesPerDay) {
+        return new Response(
+          'You have exceeded your maximum number of messages for the day! Please try again later.',
+          {
+            status: 429,
+          },
+        );
+      }
+    } else {
+      console.log(
+        '🚀 Using Ollama - skipping rate limits (unlimited messages)',
       );
     }
 
@@ -179,6 +188,7 @@ export async function POST(request: Request) {
             searchKnowledgeBase: searchKnowledgeBase({
               session,
               dataStream,
+              chatId: id,
             }),
           },
           onFinish: async ({ response }) => {
@@ -243,10 +253,16 @@ export async function POST(request: Request) {
     } else {
       return new Response(stream);
     }
-  } catch (_) {
-    return new Response('An error occurred while processing your request!', {
-      status: 500,
-    });
+  } catch (error) {
+    console.error('Chat API error:', error);
+    const errorMessage =
+      error instanceof Error ? error.message : 'Unknown error';
+    return new Response(
+      `An error occurred while processing your request: ${errorMessage}`,
+      {
+        status: 500,
+      },
+    );
   }
 }
 
@@ -303,10 +319,9 @@ export async function GET(request: Request) {
     execute: () => {},
   });
 
-  const stream = await streamContext.resumableStream(
-    recentStreamId,
-    () => emptyDataStream,
-  );
+  const stream = streamContext
+    ? await streamContext.resumableStream(recentStreamId, () => emptyDataStream)
+    : null;
 
   /*
    * For when the generation is streaming during SSR

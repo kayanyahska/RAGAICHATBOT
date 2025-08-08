@@ -69,6 +69,7 @@ export async function POST(request: Request) {
 
     const originalFilename = (formData.get('file') as File).name;
     const fileBuffer = await file.arrayBuffer();
+    const originalChatId = formData.get('originalChatId') as string; // Get the original chat ID
 
     // 1. Upload to Vercel Blob
     const blobData = await put(originalFilename, fileBuffer, {
@@ -115,6 +116,7 @@ export async function POST(request: Request) {
       aiSummary: null, // Initialize aiSummary as null
       tags: tags, // Use the processed tags array
       userId: session.user.id,
+      originalChatId: originalChatId || null, // Store the original chat ID
     };
 
     // 2. Create initial record in our database

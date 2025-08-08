@@ -189,10 +189,16 @@ export const managedFile = pgTable(
       .notNull()
       .references(() => user.id, { onDelete: 'cascade' }),
     isEmbedded: boolean('isEmbedded').notNull().default(false),
+    originalChatId: uuid('originalChatId').references(() => chat.id, {
+      onDelete: 'set null',
+    }),
   },
   (table) => {
     return {
       userIdx: index('managedFile_userId_idx').on(table.userId),
+      originalChatIdx: index('managedFile_originalChatId_idx').on(
+        table.originalChatId,
+      ),
     };
   },
 );
@@ -201,7 +207,9 @@ export type DBManagedFileType = typeof managedFile.$inferSelect;
 export type NewManagedFile = Omit<
   DBManagedFileType,
   'id' | 'uploadedAt' | 'isEmbedded'
->;
+> & {
+  originalChatId?: string | null;
+};
 
 export const tag = pgTable('Tag', {
   id: uuid('id').primaryKey().notNull().defaultRandom(),
@@ -213,3 +221,31 @@ export const tag = pgTable('Tag', {
 });
 
 export type DBTag = InferSelectModel<typeof tag>;
+
+export const chatFile = pgTable(
+  'ChatFile',
+  {
+    id: uuid('id').primaryKey().notNull().defaultRandom(),
+    chatId: uuid('chatId')
+      .notNull()
+      .references(() => chat.id, { onDelete: 'cascade' }),
+    fileId: uuid('fileId')
+      .notNull()
+      .references(() => managedFile.id, { onDelete: 'cascade' }),
+    addedAt: timestamp('addedAt', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => {
+    return {
+      chatFileIdx: index('chatFile_chatId_fileId_idx').on(
+        table.chatId,
+        table.fileId,
+      ),
+      chatIdx: index('chatFile_chatId_idx').on(table.chatId),
+      fileIdx: index('chatFile_fileId_idx').on(table.fileId),
+    };
+  },
+);
+
+export type ChatFile = InferSelectModel<typeof chatFile>;

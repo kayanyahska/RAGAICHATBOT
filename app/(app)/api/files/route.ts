@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { getManagedFilesByUserId, deleteManagedFile } from '@/lib/db/queries';
 import { auth } from '@/app/(auth)/auth';
+import { getManagedFilesByUserId, deleteManagedFile } from '@/lib/db/queries';
 
 export async function GET() {
   try {

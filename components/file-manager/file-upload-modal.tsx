@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -13,27 +13,35 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Progress } from '@/components/ui/progress';
 import { Loader2, UploadCloudIcon, AlertCircle, X } from 'lucide-react';
 import { Badge } from '../ui/badge';
 
-interface FileUploadModalProps {
+export interface FileUploadModalProps {
   isOpen: boolean;
-  onOpenChange: (isOpen: boolean) => void;
-  onUploadSuccess: (uploadedFileId: string) => void;
+  onOpenChange: (open: boolean) => void;
+  onUploadSuccess: (fileId: string) => void;
+  chatId?: string; // Add optional chatId prop
 }
 
 export function FileUploadModal({
   isOpen,
   onOpenChange,
   onUploadSuccess,
+  chatId,
 }: FileUploadModalProps) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [isEmbedding, setIsEmbedding] = useState(false);
+  const [embeddingProgress, setEmbeddingProgress] = useState(0);
+  const [embeddingStatus, setEmbeddingStatus] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [tagInput, setTagInput] = useState('');
   const [tags, setTags] = useState<string[]>([]);
+  const [uploadedFileId, setUploadedFileId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const tagInputRef = useRef<HTMLInputElement>(null);
+  const embeddingCheckInterval = useRef<NodeJS.Timeout | null>(null);
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files?.[0]) {
@@ -59,6 +67,66 @@ export function FileUploadModal({
     setTags(tags.filter((tag) => tag !== tagToRemove));
   };
 
+  const checkEmbeddingStatus = async (fileId: string) => {
+    try {
+      const response = await fetch(
+        `/api/debug/file-status?chatId=${chatId || 'none'}`,
+      );
+      const data = await response.json();
+
+      // Find the specific file
+      const file = data.allUserFiles.find((f: any) => f.id === fileId);
+
+      if (file) {
+        if (file.isEmbedded) {
+          // File is embedded, stop checking and close modal
+          setEmbeddingProgress(100);
+          setEmbeddingStatus('Embedding completed successfully!');
+          setIsEmbedding(false);
+
+          if (embeddingCheckInterval.current) {
+            clearInterval(embeddingCheckInterval.current);
+            embeddingCheckInterval.current = null;
+          }
+
+          // Wait a moment to show completion, then close
+          setTimeout(() => {
+            onUploadSuccess(fileId);
+            handleClose();
+          }, 1500);
+
+          return true;
+        } else {
+          // File is not embedded yet, continue checking
+          setEmbeddingProgress(Math.min(embeddingProgress + 10, 90));
+          setEmbeddingStatus('Processing file content...');
+          return false;
+        }
+      }
+
+      return false;
+    } catch (error) {
+      console.error('Error checking embedding status:', error);
+      return false;
+    }
+  };
+
+  const startEmbeddingProgress = (fileId: string) => {
+    setUploadedFileId(fileId);
+    setIsEmbedding(true);
+    setEmbeddingProgress(10);
+    setEmbeddingStatus('Starting embedding process...');
+
+    // Check embedding status every 2 seconds
+    embeddingCheckInterval.current = setInterval(async () => {
+      const isComplete = await checkEmbeddingStatus(fileId);
+      if (isComplete) {
+        // Interval will be cleared in checkEmbeddingStatus
+        return;
+      }
+    }, 2000);
+  };
+
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!selectedFile) {
@@ -72,6 +140,11 @@ export function FileUploadModal({
     const formData = new FormData();
     formData.append('file', selectedFile);
     formData.append('needToEmbed', 'true'); // As per your API requirement
+
+    // Add chatId if provided
+    if (chatId) {
+      formData.append('originalChatId', chatId);
+    }
 
     // Add tags to the request
     if (tags.length > 0) {
@@ -93,8 +166,9 @@ export function FileUploadModal({
       }
 
       if (result.success && result.fileId) {
-        onUploadSuccess(result.fileId);
-        handleClose();
+        // Start embedding progress tracking instead of immediately closing
+        startEmbeddingProgress(result.fileId);
+        setIsUploading(false);
       } else {
         throw new Error(
           result.error || 'Upload completed but no file ID returned.',
@@ -109,16 +183,35 @@ export function FileUploadModal({
   };
 
   const handleClose = () => {
+    // Clean up embedding check interval
+    if (embeddingCheckInterval.current) {
+      clearInterval(embeddingCheckInterval.current);
+      embeddingCheckInterval.current = null;
+    }
+
     setSelectedFile(null);
     setIsUploading(false);
+    setIsEmbedding(false);
+    setEmbeddingProgress(0);
+    setEmbeddingStatus('');
     setError(null);
     setTags([]);
     setTagInput('');
+    setUploadedFileId(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = ''; // Reset file input
     }
     onOpenChange(false);
   };
+
+  useEffect(() => {
+    return () => {
+      if (embeddingCheckInterval.current) {
+        clearInterval(embeddingCheckInterval.current);
+        embeddingCheckInterval.current = null;
+      }
+    };
+  }, []);
 
   return (
     <Dialog
@@ -191,6 +284,27 @@ export function FileUploadModal({
               {(selectedFile.size / 1024).toFixed(1)} KB)
             </div>
           )}
+
+          {/* Embedding Progress */}
+          {isEmbedding && (
+            <div className="space-y-3 p-4 bg-muted/50 rounded-lg">
+              <div className="flex items-center justify-between text-sm">
+                <span className="font-medium">Processing File</span>
+                <span className="text-muted-foreground">
+                  {embeddingProgress}%
+                </span>
+              </div>
+              <Progress value={embeddingProgress} className="w-full" />
+              <div className="text-sm text-muted-foreground">
+                {embeddingStatus}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                This may take a few minutes for large files. The dialog will
+                close automatically when complete.
+              </div>
+            </div>
+          )}
+
           {error && (
             <div className="flex items-center text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 p-3 rounded-md">
               <AlertCircle className="mr-2 h-4 w-4 flex-shrink-0" />
@@ -203,15 +317,23 @@ export function FileUploadModal({
                 type="button"
                 variant="outline"
                 onClick={handleClose}
-                disabled={isUploading}
+                disabled={isUploading || isEmbedding}
               >
-                Cancel
+                {isEmbedding ? 'Processing...' : 'Cancel'}
               </Button>
             </DialogClose>
-            <Button type="submit" disabled={isUploading || !selectedFile}>
+            <Button
+              type="submit"
+              disabled={isUploading || isEmbedding || !selectedFile}
+            >
               {isUploading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Uploading...
+                </>
+              ) : isEmbedding ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />{' '}
+                  Processing...
                 </>
               ) : (
                 'Upload File'

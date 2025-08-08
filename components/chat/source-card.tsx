@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, } from 'react';
 import {
   Collapsible,
   CollapsibleContent,
@@ -11,7 +11,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   FileTextIcon,
   ChevronDownIcon,
-  LinkIcon,
   BookOpenIcon,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
