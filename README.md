@@ -1,10 +1,10 @@
-# DocBank: Fullstack RAG-as-a-Service Template
+Fullstack RAG-as-a-Service Template
 
 **Build your own fullstack AI-powered research assistant for your private knowledge base!**
 
 Chatting with documents is one of the best general use cases for AI, both for personal and enterprise usecases, there are lots of tutorials for building a local system but no one really shows you how to build an integrated one you would launch for a SaaS.
 
-DocBank is a modern serverless Next.js template (extended from [Vercel's AI Chatbot](https://github.com/vercel/ai-chatbot)) built for the Vercel AI SDK, leveraging **Mastra** for Retrieval Augmented Generation (RAG) and **Inngest** for robust background job processing. This template provides a powerful foundation to quickly deploy a sophisticated RAG-as-a-Service application.
+It is a modern serverless Next.js template (extended from [Vercel's AI Chatbot](https://github.com/vercel/ai-chatbot)) built for the Vercel AI SDK, leveraging **Mastra** for Retrieval Augmented Generation (RAG) and **Inngest** for robust background job processing. This template provides a powerful foundation to quickly deploy a sophisticated RAG-as-a-Service application.
 
 Upload your documents here
 
@@ -18,17 +18,6 @@ Chat with them here + do all the things you can do with the Vercel AI chatbot
 [![Star on GitHub](https://img.shields.io/github/stars/KenjiPcx/DocBank?style=social)](https://github.com/KenjiPcx/DocBank)
 
 ---
-
-## The Million-Dollar Idea, Now Free.
-
-There was a time when a product with these capabilities – a private, AI-driven knowledge assistant that can ingest and reason over your documents – would be a multi-million dollar endeavor, its the core of all the new vertical AI SaaS. The AI landscape is evolving rapidly, and powerful tools are becoming more accessible.
-
-**DocBank is my contribution to the AI startup space.** I'm giving this template away for free to empower builders, innovators, and entrepreneurs like you.
-
-All I ask in return?
-
-1.  **Star this repository** on GitHub! ⭐
-2.  Give a **shoutout or a link back** when you build something amazing with it.
 
 Let's build the future of AI together!
 
@@ -78,7 +67,7 @@ Some ideas I have, centralizing data is the starting point
 
 <!-- ## Deploy Your Own
 
-Deploy your own version of DocBank to Vercel. You'll need to configure environment variables for your LLM, Inngest, Mastra, and database providers during setup. -->
+Deploy your own version to Vercel. You'll need to configure environment variables for your LLM, Inngest, Mastra, and database providers during setup. -->
 
 <!-- [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FYOUR_USERNAME%2FYOUR_REPOSITORY&env=OPENAI_API_KEY,INNGEST_EVENT_KEY,INNGEST_SIGNING_KEY,MASTRA_API_KEY,DATABASE_URL,NEXTAUTH_SECRET&envDescription=Required%20environment%20variables%20for%20Synapse%20AI.&project-name=synapse-ai-rag&repository-name=synapse-ai-rag&demo-title=Synapse%20AI%20RAG%20Service&demo-url=https%3A%2F%2Fyour-demo-url.vercel.app) -->
 
@@ -138,8 +127,3 @@ Deploy your own version of DocBank to Vercel. You'll need to configure environme
 
 Contributions are welcome! Please follow standard fork, branch, commit, and PR practices.
 
-## License
-
-Licensed under the MIT License. See `LICENSE.txt`.
-
----
